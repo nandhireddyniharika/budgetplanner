@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Family Budget Planner</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+         :root {
+            --primary: #4CAF50;
+            --accent: #2196F3;
+            --danger: #e53935;
+            --bg: #f0f2f5;
+            --card: #fff;
+        }
+        
+        * {
+            box-sizing: border-box;
+            font-family: 'Inter', sans-serif;
+        }
+        
+        body {
+            margin: 0;
+            background: var(--bg);
+        }
+        
+        header {
+            background: var(--primary);
+            color: #fff;
+            padding: 20px;
+            text-align: center;
+            font-size: 1.8rem;
+            font-weight: 600;
+        }
+        
+        .container {
+            max-width: 1000px;
+            margin: 30px auto;
+            padding: 20px;
+            background: var(--card);
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, .1);
+        }
+        
+        h2 {
+            margin-top: 0;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 5px;
+            font-size: 1.3rem;
+        }
+        
+        input,
+        select,
+        button {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            width: 100%;
+            margin: 6px 0;
+            font-size: .95rem;
+        }
+        
+        button {
+            background: var(--accent);
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background .2s;
+        }
+        
+        button:hover {
+            background: #1976d2;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        
+        th,
+        td {
+            border-bottom: 1px solid #eee;
+            padding: 10px;
+            text-align: center;
+        }
+        
+        th {
+            background: #f8f8f8;
+        }
+        
+        .delete-btn {
+            background: var(--danger);
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: .8rem;
+        }
+        
+        .delete-btn:hover {
+            background: #b71c1c;
+        }
+        
+        .edit-btn {
+            background: var(--primary);
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: .8rem;
+        }
+        
+        .edit-btn:hover {
+            background: #388e3c;
+        }
+        
+        .warn {
+            color: var(--danger);
+            font-weight: 600;
+            margin-top: 10px;
+        }
+        
+        .goal-item {
+            margin: 6px 0;
+            padding: 8px;
+            background: #fafafa;
+            border-radius: 6px;
+        }
+        
+        .chart-box {
+            margin-top: 30px;
+        }
+        
+        .section {
+            margin-top: 25px;
+        }
+    </style>
+</head>
+
+<body>
+    <header>Family Budget Planner</header>
+
+    <div class="container">
+        <!-- Salary -->
+        <div class="section">
+            <h2>Monthly Salary</h2>
+            <input id="salary" type="number" placeholder="Enter salary (₹)">
+            <button onclick="setSalary()">Save / Update Salary</button>
+            <button onclick="clearSalary()">Delete Salary</button>
+            <p id="salaryPlan"></p>
+        </div>
+
+        <!-- Expenses -->
+        <div class="section">
+            <h2>Add Expense</h2>
+            <input id="expName" placeholder="Expense name">
+            <input id="expAmt" type="number" placeholder="Amount (₹)">
+            <select id="expCategory">
+      <option>Food</option><option>Rent</option><option>Travel</option>
+      <option>Utilities</option><option>Misc</option>
+    </select>
+            <input id="dueDate" type="date">
+            <label><input type="checkbox" id="recurring"> Recurring monthly</label>
+            <button onclick="addExpense()">Add Expense</button>
+        </div>
+
+        <div class="section">
+            <h2>Expenses</h2>
+            <table id="expenseTable">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Category</th>
+                        <th>Amount (₹)</th>
+                        <th>Due</th>
+                        <th>Recurring</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+            <p id="totalSpend"></p>
+            <p id="warning" class="warn"></p>
+            <button onclick="exportCSV()">Export Expenses to CSV</button>
+        </div>
+
+        <!-- Goals -->
+        <div class="section">
+            <h2>Goals</h2>
+            <input id="goalName" placeholder="Goal name">
+            <input id="goalAmt" type="number" placeholder="Target amount (₹)">
+            <button onclick="addGoal()">Add Goal</button>
+            <div id="goalList"></div>
+        </div>
+
+        <!-- Chart -->
+        <div class="chart-box"><canvas id="catChart"></canvas></div>
+    </div>
+
+    <script>
+        let salary = parseFloat(localStorage.getItem('salary') || 0);
+        let expenses = JSON.parse(localStorage.getItem('expenses') || '[]');
+        let goals = JSON.parse(localStorage.getItem('goals') || '[]');
+        updateUI();
+
+        /* -------- Salary -------- */
+        function setSalary() {
+            salary = parseFloat(document.getElementById('salary').value) || 0;
+            localStorage.setItem('salary', salary);
+            updateUI();
+        }
+
+        function clearSalary() {
+            if (confirm("Delete stored salary?")) {
+                salary = 0;
+                localStorage.removeItem('salary');
+                updateUI();
+            }
+        }
+
+        /* -------- Expenses -------- */
+        function addExpense() {
+            const n = document.getElementById('expName').value.trim();
+            const a = parseFloat(document.getElementById('expAmt').value);
+            const c = document.getElementById('expCategory').value;
+            const d = document.getElementById('dueDate').value;
+            const r = document.getElementById('recurring').checked;
+            if (!n || isNaN(a)) {
+                alert("Enter valid expense");
+                return;
+            }
+            expenses.push({
+                n,
+                a,
+                c,
+                d,
+                r
+            });
+            localStorage.setItem('expenses', JSON.stringify(expenses));
+            ['expName', 'expAmt', 'dueDate'].forEach(id => document.getElementById(id).value = '');
+            document.getElementById('recurring').checked = false;
+            updateUI();
+        }
+
+        function deleteExpense(i) {
+            if (confirm("Delete this expense?")) {
+                expenses.splice(i, 1);
+                localStorage.setItem('expenses', JSON.stringify(expenses));
+                updateUI();
+            }
+        }
+
+        /* -------- Goals -------- */
+        function addGoal() {
+            const name = document.getElementById('goalName').value.trim();
+            const amt = parseFloat(document.getElementById('goalAmt').value);
+            if (!name || isNaN(amt)) {
+                alert("Enter valid goal");
+                return;
+            }
+            goals.push({
+                name,
+                amt
+            });
+            localStorage.setItem('goals', JSON.stringify(goals));
+            document.getElementById('goalName').value = '';
+            document.getElementById('goalAmt').value = '';
+            updateUI();
+        }
+
+        function deleteGoal(i) {
+            if (confirm("Delete this goal?")) {
+                goals.splice(i, 1);
+                localStorage.setItem('goals', JSON.stringify(goals));
+                updateUI();
+            }
+        }
+
+        function editGoal(i) {
+            const newName = prompt("New name", goals[i].name) || goals[i].name;
+            const newAmt = parseFloat(prompt("New target amount (₹)", goals[i].amt));
+            if (isNaN(newAmt)) {
+                alert("Invalid amount");
+                return;
+            }
+            goals[i] = {
+                name: newName,
+                amt: newAmt
+            };
+            localStorage.setItem('goals', JSON.stringify(goals));
+            updateUI();
+        }
+
+        /* -------- CSV Export -------- */
+        function exportCSV() {
+            let csv = "Name,Category,Amount (₹),Due,Recurring\n";
+            expenses.forEach(e => csv += `${e.n},${e.c},${e.a},${e.d||''},${e.r}\n`);
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(new Blob([csv], {
+                type: 'text/csv'
+            }));
+            a.download = "expenses.csv";
+            a.click();
+        }
+
+        /* -------- UI Update -------- */
+        function updateUI() {
+            if (salary > 0) {
+                document.getElementById('salaryPlan').textContent =
+                    `50/30/20 Plan → Needs ₹${(salary*0.5).toFixed(0)}, Wants ₹${(salary*0.3).toFixed(0)}, Savings ₹${(salary*0.2).toFixed(0)}`;
+                document.getElementById('salary').value = salary;
+            } else {
+                document.getElementById('salaryPlan').textContent = "No salary set.";
+                document.getElementById('salary').value = '';
+            }
+
+            const tb = document.querySelector('#expenseTable tbody');
+            tb.innerHTML = '';
+            let total = 0;
+            expenses.forEach((e, i) => {
+                total += e.a;
+                tb.innerHTML += `<tr>
+      <td>${e.n}</td><td>${e.c}</td><td>₹${e.a}</td>
+      <td>${e.d||'-'}</td><td>${e.r?'Yes':'No'}</td>
+      <td><button class="delete-btn" onclick="deleteExpense(${i})">Delete</button></td>
+    </tr>`;
+            });
+            document.getElementById('totalSpend').textContent = `Total Spent: ₹${total}`;
+            document.getElementById('warning').textContent =
+                salary && total > salary ? '⚠️ Salary exceeded!' :
+                salary && total > salary * 0.8 ? '⚠️ Over 80% spent!' : '';
+
+            const gl = document.getElementById('goalList');
+            gl.innerHTML = '';
+            const savings = salary ? Math.max(salary - total, 0) : 0;
+            goals.forEach((g, i) => {
+                const need = Math.max(g.amt - savings, 0);
+                const pct = Math.min((savings / g.amt) * 100, 100).toFixed(1);
+                gl.innerHTML += `<div class="goal-item">
+      <strong>${g.name}</strong> – Target ₹${g.amt}<br>
+      Progress: ${pct}% | Need more: ₹${need.toFixed(0)}<br>
+      <button class="edit-btn" onclick="editGoal(${i})">Edit</button>
+      <button class="delete-btn" onclick="deleteGoal(${i})">Delete</button>
+    </div>`;
+            });
+
+            drawChart();
+            checkReminders();
+        }
+
+        /* -------- Chart & Reminders -------- */
+        function drawChart() {
+            const catTotals = {};
+            expenses.forEach(e => catTotals[e.c] = (catTotals[e.c] || 0) + e.a);
+            const ctx = document.getElementById('catChart').getContext('2d');
+            if (window.catChart) window.catChart.destroy();
+            window.catChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(catTotals),
+                    datasets: [{
+                        data: Object.values(catTotals),
+                        backgroundColor: ['#4CAF50', '#2196F3', '#FF9800', '#9C27B0', '#FF5252']
+                    }]
+                },
+                options: {
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+        }
+
+        function checkReminders() {
+            const soon = expenses.filter(e => e.d && daysLeft(e.d) <= 2);
+            if (soon.length) alert("Upcoming payments:\n" + soon.map(e => `${e.n} (₹${e.a}) on ${e.d}`).join("\n"));
+        }
+
+        function daysLeft(d) {
+            return Math.ceil((new Date(d) - new Date()) / (1000 * 60 * 60 * 24));
+        }
+    </script>
+</body>
+
+</html>
